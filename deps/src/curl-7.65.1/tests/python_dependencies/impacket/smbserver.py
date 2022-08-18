@@ -73,31 +73,45 @@ def outputToJohnFormat(challenge, username, domain, lmresponse, ntresponse):
     try:
         if len(ntresponse) > 24:
             # Extended Security - NTLMv2
-            ret_value = {'hash_string':'%s::%s:%s:%s:%s' % (username.decode('utf-16le'), domain.decode('utf-16le'), hexlify(challenge), hexlify(ntresponse)[:32], hexlify(ntresponse)[32:]), 'hash_version':'ntlmv2'}
+            ret_value = {
+                'hash_string': f"{username.decode('utf-16le')}::{domain.decode('utf-16le')}:{hexlify(challenge)}:{hexlify(ntresponse)[:32]}:{hexlify(ntresponse)[32:]}",
+                'hash_version': 'ntlmv2',
+            }
+
         else:
             # NTLMv1
-            ret_value = {'hash_string':'%s::%s:%s:%s:%s' % (username.decode('utf-16le'), domain.decode('utf-16le'), hexlify(lmresponse), hexlify(ntresponse), hexlify(challenge)), 'hash_version':'ntlm'}
+            ret_value = {
+                'hash_string': f"{username.decode('utf-16le')}::{domain.decode('utf-16le')}:{hexlify(lmresponse)}:{hexlify(ntresponse)}:{hexlify(challenge)}",
+                'hash_version': 'ntlm',
+            }
+
     except:
         # Let's try w/o decoding Unicode
         try:
             if len(ntresponse) > 24:
                 # Extended Security - NTLMv2
-                ret_value = {'hash_string':'%s::%s:%s:%s:%s' % (username, domain, hexlify(challenge), hexlify(ntresponse)[:32], hexlify(ntresponse)[32:]), 'hash_version':'ntlmv2'}
+                ret_value = {
+                    'hash_string': f'{username}::{domain}:{hexlify(challenge)}:{hexlify(ntresponse)[:32]}:{hexlify(ntresponse)[32:]}',
+                    'hash_version': 'ntlmv2',
+                }
+
             else:
                 # NTLMv1
-                ret_value = {'hash_string':'%s::%s:%s:%s:%s' % (username, domain, hexlify(lmresponse), hexlify(ntresponse), hexlify(challenge)), 'hash_version':'ntlm'}
-        except Exception as e:
-            LOG.error("outputToJohnFormat: %s" % e)
-            pass
+                ret_value = {
+                    'hash_string': f'{username}::{domain}:{hexlify(lmresponse)}:{hexlify(ntresponse)}:{hexlify(challenge)}',
+                    'hash_version': 'ntlm',
+                }
 
+        except Exception as e:
+            LOG.error(f"outputToJohnFormat: {e}")
     return ret_value
 
 def writeJohnOutputToFile(hash_string, hash_version, file_name):
     fn_data = os.path.splitext(file_name)
     if hash_version == "ntlmv2":
-        output_filename = fn_data[0] + "_ntlmv2" + fn_data[1]
+        output_filename = f"{fn_data[0]}_ntlmv2{fn_data[1]}"
     else:
-        output_filename = fn_data[0] + "_ntlm" + fn_data[1]
+        output_filename = f"{fn_data[0]}_ntlm{fn_data[1]}"
 
     with open(output_filename,"a") as f:
             f.write(hash_string)
@@ -105,16 +119,10 @@ def writeJohnOutputToFile(hash_string, hash_version, file_name):
 
 
 def decodeSMBString( flags, text ):
-    if flags & smb.SMB.FLAGS2_UNICODE:
-        return text.decode('utf-16le')
-    else:
-        return text
+    return text.decode('utf-16le') if flags & smb.SMB.FLAGS2_UNICODE else text
 
 def encodeSMBString( flags, text ):
-    if flags & smb.SMB.FLAGS2_UNICODE:
-        return (text).encode('utf-16le')
-    else:
-        return text
+    return (text).encode('utf-16le') if flags & smb.SMB.FLAGS2_UNICODE else text
 
 def getFileTime(t):
     t *= 10000000
@@ -130,8 +138,7 @@ def getSMBDate(t):
     # TODO: Fix this :P
     d = datetime.date.fromtimestamp(t)
     year = d.year - 1980
-    ret = (year << 8) + (d.month << 4) + d.day
-    return ret
+    return (year << 8) + (d.month << 4) + d.day
 
 def getSMBTime(t):
     # TODO: Fix this :P
@@ -143,35 +150,27 @@ def getShares(connId, smbServer):
     sections = config.sections()
     # Remove the global one
     del(sections[sections.index('global')])
-    shares = {}
-    for i in sections:
-        shares[i] = dict(config.items(i))
-    return shares
+    return {i: dict(config.items(i)) for i in sections}
 
 def searchShare(connId, share, smbServer):
     config = smbServer.getServerConfig()
-    if config.has_section(share):
-       return dict(config.items(share))
-    else:
-       return None
+    return dict(config.items(share)) if config.has_section(share) else None
 
 def openFile(path,fileName, accessMode, fileAttributes, openMode):
     fileName = os.path.normpath(fileName.replace('\\','/'))
     errorCode = 0
-    if len(fileName) > 0 and (fileName[0] == '/' or fileName[0] == '\\'):
-       # strip leading '/'
-       fileName = fileName[1:]
+    if len(fileName) > 0 and fileName[0] in ['/', '\\']:
+        # strip leading '/'
+        fileName = fileName[1:]
     pathName = os.path.join(path,fileName)
     mode = 0
     # Check the Open Mode
     if openMode & 0x10:
         # If the file does not exist, create it.
         mode = os.O_CREAT
-    else:
-        # If file does not exist, return an error
-        if os.path.exists(pathName) is not True:
-            errorCode = STATUS_NO_SUCH_FILE
-            return 0,mode, pathName, errorCode
+    elif os.path.exists(pathName) is not True:
+        errorCode = STATUS_NO_SUCH_FILE
+        return 0,mode, pathName, errorCode
 
     if os.path.isdir(pathName) and (fileAttributes & smb.ATTR_DIRECTORY) == 0:
         # Request to open a normal file and this is actually a directory
@@ -190,7 +189,7 @@ def openFile(path,fileName, accessMode, fileAttributes, openMode):
             mode |= os.O_BINARY
         fid = os.open(pathName, mode)
     except Exception as e:
-        LOG.error("openFile: %s,%s" % (pathName, mode) ,e)
+        LOG.error(f"openFile: {pathName},{mode}", e)
         fid = 0
         errorCode = STATUS_ACCESS_DENIED
 
@@ -206,13 +205,16 @@ def queryFsInformation(path, filename, level=0):
          flags    = 0
 
     fileName = os.path.normpath(filename.replace('\\','/'))
-    if len(fileName) > 0 and (fileName[0] == '/' or fileName[0] == '\\'):
-       # strip leading '/'
-       fileName = fileName[1:]
+    if len(fileName) > 0 and fileName[0] in ['/', '\\']:
+        # strip leading '/'
+        fileName = fileName[1:]
     pathName = os.path.join(path,fileName)
     fileSize = os.path.getsize(pathName)
     (mode, ino, dev, nlink, uid, gid, size, atime, mtime, ctime) = os.stat(pathName)
-    if level == smb.SMB_QUERY_FS_ATTRIBUTE_INFO or level == smb2.SMB2_FILESYSTEM_ATTRIBUTE_INFO:
+    if level in [
+        smb.SMB_QUERY_FS_ATTRIBUTE_INFO,
+        smb2.SMB2_FILESYSTEM_ATTRIBUTE_INFO,
+    ]:
         data = smb.SMBQueryFsAttributeInfo()
         data['FileSystemAttributes']      = smb.FILE_CASE_SENSITIVE_SEARCH | smb.FILE_CASE_PRESERVED_NAMES
         data['MaxFilenNameLengthInBytes'] = 255
@@ -223,7 +225,10 @@ def queryFsInformation(path, filename, level=0):
         data = smb.SMBQueryFsInfoVolume( flags = flags )
         data['VolumeLabel']               = 'SHARE'.encode(encoding)
         return data.getData()
-    elif level == smb.SMB_QUERY_FS_VOLUME_INFO or level == smb2.SMB2_FILESYSTEM_VOLUME_INFO:
+    elif level in [
+        smb.SMB_QUERY_FS_VOLUME_INFO,
+        smb2.SMB2_FILESYSTEM_VOLUME_INFO,
+    ]:
         data = smb.SMBQueryFsVolumeInfo()
         data['VolumeLabel']               = ''
         data['VolumeCreationTime']        = getFileTime(ctime)

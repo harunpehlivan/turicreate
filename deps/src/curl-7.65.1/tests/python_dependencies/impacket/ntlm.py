@@ -210,9 +210,7 @@ class AV_PAIRS():
         self.fields[key] = (len(value),value)
 
     def __getitem__(self, key):
-        if key in self.fields:
-           return self.fields[key]
-        return None
+        return self.fields[key] if key in self.fields else None
 
     def __delitem__(self, key):
         del self.fields[key]
@@ -256,11 +254,10 @@ class NTLMAuthMixin:
     def get_os_version(self):
         if self['os_version'] == '':
             return None
-        else:
-            mayor_v = struct.unpack('B',self['os_version'][0])[0]
-            minor_v = struct.unpack('B',self['os_version'][1])[0]
-            build_v = struct.unpack('H',self['os_version'][2:4])
-            return (mayor_v,minor_v,build_v)
+        mayor_v = struct.unpack('B',self['os_version'][0])[0]
+        minor_v = struct.unpack('B',self['os_version'][1])[0]
+        build_v = struct.unpack('H',self['os_version'][2:4])
+        return (mayor_v,minor_v,build_v)
 
 class NTLMAuthNegotiate(Structure, NTLMAuthMixin):
 
@@ -324,10 +321,7 @@ class NTLMAuthNegotiate(Structure, NTLMAuthMixin):
         self['host_name'] = data[ host_offset : host_end ]
 
         hasOsInfo = self['flags'] & NTLMSSP_NEGOTIATE_VERSION
-        if len(data) >= 36 and hasOsInfo:
-            self['os_version'] = data[32:40]
-        else:
-            self['os_version'] = ''
+        self['os_version'] = data[32:40] if len(data) >= 36 and hasOsInfo else ''
 
 class NTLMAuthChallenge(Structure):
 
@@ -349,10 +343,7 @@ class NTLMAuthChallenge(Structure):
         ('TargetInfoFields',':'))
 
     def checkVersion(self, flags):
-        if flags is not None:
-           if flags & NTLMSSP_NEGOTIATE_VERSION == 0:
-              return 0
-        return 8
+        return 0 if flags is not None and flags & NTLMSSP_NEGOTIATE_VERSION == 0 else 8
 
     def getData(self):
         if self['TargetInfoFields'] is not None and type(self['TargetInfoFields']) is not str:
@@ -440,16 +431,12 @@ class NTLMAuthChallengeResponse(Structure, NTLMAuthMixin):
                 self['host_name'] = 'NULL'.encode('utf-16le')      # for NULL session there must be a hostname
 
     def checkVersion(self, flags):
-        if flags is not None:
-           if flags & NTLMSSP_NEGOTIATE_VERSION == 0:
-              return 0
-        return 8
+        return 0 if flags is not None and flags & NTLMSSP_NEGOTIATE_VERSION == 0 else 8
 
     def checkMIC(self, flags):
         # TODO: Find a proper way to check the MIC is in there
-        if flags is not None:
-           if flags & NTLMSSP_NEGOTIATE_VERSION == 0:
-              return 0
+        if flags is not None and flags & NTLMSSP_NEGOTIATE_VERSION == 0:
+            return 0
         return 16
 
     def getData(self):
@@ -530,14 +517,16 @@ def __expand_DES_key( key):
     # Expand the key from a 7-byte password key into a 8-byte DES key
     key  = key[:7]
     key += '\x00'*(7-len(key))
-    s = chr(((ord(key[0]) >> 1) & 0x7f) << 1)
-    s = s + chr(((ord(key[0]) & 0x01) << 6 | ((ord(key[1]) >> 2) & 0x3f)) << 1)
-    s = s + chr(((ord(key[1]) & 0x03) << 5 | ((ord(key[2]) >> 3) & 0x1f)) << 1)
-    s = s + chr(((ord(key[2]) & 0x07) << 4 | ((ord(key[3]) >> 4) & 0x0f)) << 1)
-    s = s + chr(((ord(key[3]) & 0x0f) << 3 | ((ord(key[4]) >> 5) & 0x07)) << 1)
-    s = s + chr(((ord(key[4]) & 0x1f) << 2 | ((ord(key[5]) >> 6) & 0x03)) << 1)
-    s = s + chr(((ord(key[5]) & 0x3f) << 1 | ((ord(key[6]) >> 7) & 0x01)) << 1)
-    s = s + chr((ord(key[6]) & 0x7f) << 1)
+    s = chr(((ord(key[0]) >> 1) & 0x7F) << 1) + chr(
+        ((ord(key[0]) & 0x01) << 6 | ((ord(key[1]) >> 2) & 0x3F)) << 1
+    )
+
+    s += chr(((ord(key[1]) & 0x03) << 5 | ((ord(key[2]) >> 3) & 0x1f)) << 1)
+    s += chr(((ord(key[2]) & 0x07) << 4 | ((ord(key[3]) >> 4) & 0x0f)) << 1)
+    s += chr(((ord(key[3]) & 0x0f) << 3 | ((ord(key[4]) >> 5) & 0x07)) << 1)
+    s += chr(((ord(key[4]) & 0x1f) << 2 | ((ord(key[5]) >> 6) & 0x03)) << 1)
+    s += chr(((ord(key[5]) & 0x3f) << 1 | ((ord(key[6]) >> 7) & 0x01)) << 1)
+    s += chr((ord(key[6]) & 0x7f) << 1)
     return s
 
 def __DES_block(key, msg):
@@ -612,7 +601,10 @@ def getNTLMSSPType3(type1, type2, user, password, domain, lmhash = '', nthash = 
     # method we will create a valid ChallengeResponse
     ntlmChallengeResponse = NTLMAuthChallengeResponse(user, password, ntlmChallenge['challenge'])
 
-    clientChallenge = "".join([random.choice(string.digits+string.letters) for i in range(8)])
+    clientChallenge = "".join(
+        [random.choice(string.digits + string.letters) for _ in range(8)]
+    )
+
 
     serverName = ntlmChallenge['TargetInfoFields']
 
@@ -646,33 +638,21 @@ def getNTLMSSPType3(type1, type2, user, password, domain, lmhash = '', nthash = 
 
     # If we set up key exchange, let's fill the right variables
     if ntlmChallenge['flags'] & NTLMSSP_NEGOTIATE_KEY_EXCH:
-       # not exactly what I call random tho :\
-       # exportedSessionKey = this is the key we should use to sign
-       exportedSessionKey = "".join([random.choice(string.digits+string.letters) for i in range(16)])
-       #exportedSessionKey = "A"*16
-       #print "keyExchangeKey %r" % keyExchangeKey
-       # Let's generate the right session key based on the challenge flags
-       #if responseFlags & NTLMSSP_NTLM2_KEY:
-           # Extended session security enabled
-       #    if responseFlags & NTLMSSP_KEY_128:
-               # Full key
-       #        exportedSessionKey = exportedSessionKey
-       #    elif responseFlags & NTLMSSP_KEY_56:
-               # Only 56-bit key
-       #        exportedSessionKey = exportedSessionKey[:7]
-       #    else:
-       #        exportedSessionKey = exportedSessionKey[:5]
-       #elif responseFlags & NTLMSSP_KEY_56:
-           # No extended session security, just 56 bits key
-       #    exportedSessionKey = exportedSessionKey[:7] + '\xa0'
-       #else:
-       #    exportedSessionKey = exportedSessionKey[:5] + '\xe5\x38\xb0'
+               # not exactly what I call random tho :\
+               # exportedSessionKey = this is the key we should use to sign
+        exportedSessionKey = "".join(
+            [random.choice(string.digits + string.letters) for _ in range(16)]
+        )
 
-       encryptedRandomSessionKey = generateEncryptedSessionKey(keyExchangeKey, exportedSessionKey)
+        #    exportedSessionKey = exportedSessionKey[:7] + '\xa0'
+        #else:
+        #    exportedSessionKey = exportedSessionKey[:5] + '\xe5\x38\xb0'
+
+        encryptedRandomSessionKey = generateEncryptedSessionKey(keyExchangeKey, exportedSessionKey)
     else:
-       encryptedRandomSessionKey = None
-       # [MS-NLMP] page 46
-       exportedSessionKey        = keyExchangeKey
+        encryptedRandomSessionKey = None
+        # [MS-NLMP] page 46
+        exportedSessionKey        = keyExchangeKey
 
     ntlmChallengeResponse['flags'] = responseFlags
     ntlmChallengeResponse['domain_name'] = domain.encode('utf-16le')
@@ -687,10 +667,7 @@ def getNTLMSSPType3(type1, type2, user, password, domain, lmhash = '', nthash = 
 # NTLMv1 Algorithm
 
 def generateSessionKeyV1(password, lmhash, nthash):
-    if POW:
-        hash = POW.Digest(POW.MD4_DIGEST)
-    else:
-        hash = MD4.new()
+    hash = POW.Digest(POW.MD4_DIGEST) if POW else MD4.new()
     hash.update(NTOWFv1(password, lmhash, nthash))
     return hash.digest()
 
@@ -726,14 +703,10 @@ def compute_lmhash(password):
     return lmhash
 
 def NTOWFv1(password, lmhash = '', nthash=''):
-    if nthash != '':
-       return nthash
-    return compute_nthash(password)
+    return nthash if nthash != '' else compute_nthash(password)
 
 def LMOWFv1(password, lmhash = '', nthash=''):
-    if lmhash != '':
-       return lmhash
-    return compute_lmhash(password)
+    return lmhash if lmhash != '' else compute_lmhash(password)
 
 def compute_nthash(password):
     # This is done according to Samba's encryption specification (docs/html/ENCRYPTION.html)
@@ -745,10 +718,7 @@ def compute_nthash(password):
         import sys
         password = password.decode(sys.getfilesystemencoding()).encode('utf_16le')
 
-    if POW:
-        hash = POW.Digest(POW.MD4_DIGEST)
-    else:
-        hash = MD4.new()
+    hash = POW.Digest(POW.MD4_DIGEST) if POW else MD4.new()
     hash.update(password)
     return hash.digest()
 
@@ -760,31 +730,29 @@ def get_ntlmv1_response(key, challenge):
 # Crypto Stuff
 
 def MAC(flags, handle, signingKey, seqNum, message):
-   # [MS-NLMP] Section 3.4.4
-   # Returns the right messageSignature depending on the flags
-   messageSignature = NTLMMessageSignature(flags)
-   if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
-       if flags & NTLMSSP_NEGOTIATE_KEY_EXCH:
-           messageSignature['Version'] = 1
-           messageSignature['Checksum'] = struct.unpack('<q',handle(hmac_md5(signingKey, struct.pack('<i',seqNum)+message)[:8]))[0]
-           messageSignature['SeqNum'] = seqNum
-           seqNum += 1
-       else:
-           messageSignature['Version'] = 1
-           messageSignature['Checksum'] = struct.unpack('<q',hmac_md5(signingKey, struct.pack('<i',seqNum)+message)[:8])[0]
-           messageSignature['SeqNum'] = seqNum
-           seqNum += 1
-   else:
-       messageSignature['Version'] = 1
-       messageSignature['Checksum'] = struct.pack('<i',binascii.crc32(message))
-       messageSignature['RandomPad'] = 0
-       messageSignature['RandomPad'] = handle(struct.pack('<i',messageSignature['RandomPad']))
-       messageSignature['Checksum'] = struct.unpack('<i',handle(messageSignature['Checksum']))[0]
-       messageSignature['SeqNum'] = handle('\x00\x00\x00\x00')
-       messageSignature['SeqNum'] = struct.unpack('<i',messageSignature['SeqNum'])[0] ^ seqNum
-       messageSignature['RandomPad'] = 0
+    # [MS-NLMP] Section 3.4.4
+    # Returns the right messageSignature depending on the flags
+    messageSignature = NTLMMessageSignature(flags)
+    if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+        if flags & NTLMSSP_NEGOTIATE_KEY_EXCH:
+            messageSignature['Version'] = 1
+            messageSignature['Checksum'] = struct.unpack('<q',handle(hmac_md5(signingKey, struct.pack('<i',seqNum)+message)[:8]))[0]
+        else:
+            messageSignature['Version'] = 1
+            messageSignature['Checksum'] = struct.unpack('<q',hmac_md5(signingKey, struct.pack('<i',seqNum)+message)[:8])[0]
+        messageSignature['SeqNum'] = seqNum
+        seqNum += 1
+    else:
+        messageSignature['Version'] = 1
+        messageSignature['Checksum'] = struct.pack('<i',binascii.crc32(message))
+        messageSignature['RandomPad'] = 0
+        messageSignature['RandomPad'] = handle(struct.pack('<i',messageSignature['RandomPad']))
+        messageSignature['Checksum'] = struct.unpack('<i',handle(messageSignature['Checksum']))[0]
+        messageSignature['SeqNum'] = handle('\x00\x00\x00\x00')
+        messageSignature['SeqNum'] = struct.unpack('<i',messageSignature['SeqNum'])[0] ^ seqNum
+        messageSignature['RandomPad'] = 0
 
-   return messageSignature
+    return messageSignature
 
 def SEAL(flags, signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, handle):
    sealedMessage = handle(messageToEncrypt)
@@ -795,56 +763,51 @@ def SIGN(flags, signingKey, message, seqNum, handle):
    return MAC(flags, handle, signingKey, seqNum, message)
 
 def SIGNKEY(flags, randomSessionKey, mode = 'Client'):
-   if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
-       if mode == 'Client':
-           md5 = hashlib.new('md5')
-           md5.update(randomSessionKey + "session key to client-to-server signing key magic constant\x00")
-           signKey = md5.digest()
-       else:
-           md5 = hashlib.new('md5')
-           md5.update(randomSessionKey + "session key to server-to-client signing key magic constant\x00")
-           signKey = md5.digest()
-   else:
-       signKey = None
-   return signKey
+    if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+        if mode == 'Client':
+            md5 = hashlib.new('md5')
+            md5.update(randomSessionKey + "session key to client-to-server signing key magic constant\x00")
+        else:
+            md5 = hashlib.new('md5')
+            md5.update(randomSessionKey + "session key to server-to-client signing key magic constant\x00")
+        return md5.digest()
+    else:
+        return None
 
 def SEALKEY(flags, randomSessionKey, mode = 'Client'):
-   if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
-       if flags & NTLMSSP_NEGOTIATE_128:
-           sealKey = randomSessionKey
-       elif flags & NTLMSSP_NEGOTIATE_56:
-           sealKey = randomSessionKey[:7]
-       else:
-           sealKey = randomSessionKey[:5]
+    if flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+        if flags & NTLMSSP_NEGOTIATE_128:
+            sealKey = randomSessionKey
+        elif flags & NTLMSSP_NEGOTIATE_56:
+            sealKey = randomSessionKey[:7]
+        else:
+            sealKey = randomSessionKey[:5]
 
-       if mode == 'Client':
-               md5 = hashlib.new('md5')
-               md5.update(sealKey + 'session key to client-to-server sealing key magic constant\x00')
-               sealKey = md5.digest()
-       else:
-               md5 = hashlib.new('md5')
-               md5.update(sealKey + 'session key to server-to-client sealing key magic constant\x00')
-               sealKey = md5.digest()
+        if mode == 'Client':
+            md5 = hashlib.new('md5')
+            md5.update(sealKey + 'session key to client-to-server sealing key magic constant\x00')
+        else:
+            md5 = hashlib.new('md5')
+            md5.update(sealKey + 'session key to server-to-client sealing key magic constant\x00')
+        sealKey = md5.digest()
+    elif flags & NTLMSSP_NEGOTIATE_56:
+        sealKey = randomSessionKey[:7] + '\xa0'
+    else:
+        sealKey = randomSessionKey[:5] + '\xe5\x38\xb0'
 
-   elif flags & NTLMSSP_NEGOTIATE_56:
-       sealKey = randomSessionKey[:7] + '\xa0'
-   else:
-       sealKey = randomSessionKey[:5] + '\xe5\x38\xb0'
-
-   return sealKey
+    return sealKey
 
 
 def generateEncryptedSessionKey(keyExchangeKey, exportedSessionKey):
-   if POW:
-       cipher = POW.Symmetric(POW.RC4)
-       cipher.encryptInit(keyExchangeKey)
-       cipher_encrypt = cipher.update
-   else:
-       cipher = ARC4.new(keyExchangeKey)
-       cipher_encrypt = cipher.encrypt
+    if POW:
+        cipher = POW.Symmetric(POW.RC4)
+        cipher.encryptInit(keyExchangeKey)
+        cipher_encrypt = cipher.update
+    else:
+        cipher = ARC4.new(keyExchangeKey)
+        cipher_encrypt = cipher.encrypt
 
-   sessionKey = cipher_encrypt(exportedSessionKey)
-   return sessionKey
+    return cipher_encrypt(exportedSessionKey)
 
 def KXKEY(flags, sessionBaseKey, lmChallengeResponse, serverChallenge, password, lmhash, nthash, use_ntlmv2 = USE_NTLMv2):
    if use_ntlmv2:
@@ -871,19 +834,15 @@ def hmac_md5(key, data):
     if POW:
         h = POW.Hmac(POW.MD5_DIGEST, key)
         h.update(data)
-        result = h.mac()
+        return h.mac()
     else:
         import hmac
         h = hmac.new(key)
         h.update(data)
-        result = h.digest()
-    return result
+        return h.digest()
 
 def NTOWFv2( user, password, domain, hash = ''):
-    if hash != '':
-       theHash = hash
-    else:
-       theHash = compute_nthash(password)
+    theHash = hash if hash != '' else compute_nthash(password)
     return hmac_md5(theHash, user.upper().encode('utf-16le') + domain.encode('utf-16le'))
 
 def LMOWFv2( user, password, domain, lmhash = ''):

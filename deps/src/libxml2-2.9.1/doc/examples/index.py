@@ -191,11 +191,11 @@ def dump_symbols(output):
     keys.sort()
     for symbol in keys:
         output.write("    <symbol name='%s'>\n" % (symbol))
-	info = symbols[symbol]
-	i = 1
-	while i < len(info):
-	    output.write("      <ref filename='%s'/>\n" % (info[i]))
-	    i = i + 1
+        info = symbols[symbol]
+        i = 1
+        while i < len(info):
+            output.write("      <ref filename='%s'/>\n" % (info[i]))
+            i += 1
         output.write("    </symbol>\n")
     output.write("  </symbols>\n")
 
@@ -207,11 +207,11 @@ def dump_sections(output):
     keys.sort()
     for section in keys:
         output.write("    <section name='%s'>\n" % (section))
-	info = sections[section]
-	i = 0
-	while i < len(info):
-	    output.write("      <example filename='%s'/>\n" % (info[i]))
-	    i = i + 1
+        info = sections[section]
+        i = 0
+        while i < len(info):
+            output.write("      <example filename='%s'/>\n" % (info[i]))
+            i += 1
         output.write("    </section>\n")
     output.write("  </sections>\n")
 

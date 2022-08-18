@@ -219,7 +219,7 @@ class NBNodeStatusResponse(NBResourceRecord):
                 self._data = self.get_rdata()
                 self.num_names = unpack('>B',self._data[:1])[0]
                 offset = 1
-                for i in range(0, self.num_names):
+                for _ in range(self.num_names):
                     name = self._data[offset:offset + 15]
                     type,flags = unpack('>BH', self._data[offset + 15: offset + 18])
                     offset += 18
@@ -250,7 +250,7 @@ class NBNodeStatusResponse(NBResourceRecord):
         self.num_names += 1
     def rawData(self):
         res = pack('!B', self.num_names )
-        for i in range(0, self.num_names):
+        for i in range(self.num_names):
             res += self.node_names[i].rawData()
 
 class NBPositiveNameQueryResponse(NBResourceRecord):
@@ -347,8 +347,19 @@ class NetBIOSPacket:
         secondWord = self.opcode << 11
         secondWord |= self.nm_flags << 4
         secondWord |= self.rcode
-        data = pack('!HHHHHH', self.name_trn_id, secondWord , self.qdcount, self.ancount, self.nscount, self.arcount) + self.questions + self.answers
-        return data
+        return (
+            pack(
+                '!HHHHHH',
+                self.name_trn_id,
+                secondWord,
+                self.qdcount,
+                self.ancount,
+                self.nscount,
+                self.arcount,
+            )
+            + self.questions
+            + self.answers
+        )
     def get_answers(self):
         return self.answers
 
@@ -447,7 +458,7 @@ class NetBIOS:
         af, socktype, proto, _canonname, _sa = socket.getaddrinfo(dstaddr, port, socket.AF_INET, socket.SOCK_DGRAM)[0]
         s = socket.socket(af, socktype, proto)
         has_bind = 1
-        for _i in range(0, 10):
+        for _i in range(10):
         # We try to bind to a port for 10 tries
             try:
                 s.bind(( INADDR_ANY, randint(10000, 60000) ))
@@ -510,23 +521,17 @@ class NetBIOS:
         p.set_nm_flags(NM_FLAGS_RD)
         if not destaddr:
             p.set_nm_flags(p.get_nm_flags() | NM_FLAGS_BROADCAST)
-            destaddr = self.__broadcastaddr            
+            destaddr = self.__broadcastaddr
         req = p.rawData()
-        
+
         tries = retries
         while 1:
             self.__sock.sendto(req, ( destaddr, self.__servport ))
             try:
                 ready, _, _ = select.select([ self.__sock.fileno() ], [ ] , [ ], timeout)
-                if not ready:
-                    if tries:
-                        # Retry again until tries == 0
-                        tries -= 1
-                    else:
-                        raise NetBIOSTimeout
-                else:
+                if ready:
                     data, _ = self.__sock.recvfrom(65536, 0)
-                    
+
                     res = NetBIOSPacket(data)
                     if res.get_trn_id() == p.get_trn_id():
                         if res.get_rcode():
@@ -534,13 +539,18 @@ class NetBIOS:
                                 return None
                             else:
                                 raise NetBIOSError( 'Negative name query response', ERRCLASS_QUERY, res.get_rcode())
-                        
+
                         if res.get_ancount() != 1:
                             raise NetBIOSError( 'Malformed response')
-                        
+
                         return NBPositiveNameQueryResponse(res.get_answers())
+                elif tries:
+                    # Retry again until tries == 0
+                    tries -= 1
+                else:
+                    raise NetBIOSTimeout
             except select.error as ex:
-                if ex[0] != errno.EINTR and ex[0] != errno.EAGAIN:
+                if ex[0] not in [errno.EINTR, errno.EAGAIN]:
                     raise NetBIOSError( 'Error occurs while waiting for response', ERRCLASS_OS, ex[0])
                 raise
 
@@ -556,24 +566,18 @@ class NetBIOS:
 
         if not destaddr:
             p.set_nm_flags(NM_FLAGS_BROADCAST)
-            destaddr = self.__broadcastaddr            
+            destaddr = self.__broadcastaddr
         req = p.rawData()
         tries = 3
         while 1:
             try:
                 self.__sock.sendto(req, 0, ( destaddr, self.__servport ))
                 ready, _, _ = select.select([ self.__sock.fileno() ], [ ] , [ ], timeout)
-                if not ready:
-                    if tries:
-                        # Retry again until tries == 0
-                        tries -= 1
-                    else:
-                        raise NetBIOSTimeout
-                else:
+                if ready:
                     try:
                         data, _ = self.__sock.recvfrom(65536, 0)
                     except Exception as e:
-                        raise NetBIOSError("recvfrom error: %s" % str(e))
+                        raise NetBIOSError(f"recvfrom error: {str(e)}")
                     self.__sock.close()
                     res = NetBIOSPacket(data)
                     if res.get_trn_id() == p.get_trn_id():
@@ -586,11 +590,16 @@ class NetBIOS:
                         answ = NBNodeStatusResponse(res.get_answers())
                         self.mac = answ.get_mac()
                         return answ.get_node_names()
+                elif tries:
+                    # Retry again until tries == 0
+                    tries -= 1
+                else:
+                    raise NetBIOSTimeout
             except select.error as ex:
-                if ex[0] != errno.EINTR and ex[0] != errno.EAGAIN:
+                if ex[0] not in [errno.EINTR, errno.EAGAIN]:
                     raise NetBIOSError( 'Error occurs while waiting for response', ERRCLASS_OS, ex[0])
             except socket.error as ex:
-                raise NetBIOSError('Connection error: %s' % str(ex))
+                raise NetBIOSError(f'Connection error: {str(ex)}')
 
 # Perform first and second level encoding of name as specified in RFC 1001 (Section 4)
 def encode_name(name, type, scope):
@@ -600,15 +609,14 @@ def encode_name(name, type, scope):
         name = name[:15] + chr(type)
     else:
         name = string.ljust(name, 15) + chr(type)
-        
+
     encoded_name = chr(len(name) * 2) + re.sub('.', _do_first_level_encoding, name)
-    if scope:
-        encoded_scope = ''
-        for s in string.split(scope, '.'):
-            encoded_scope = encoded_scope + chr(len(s)) + s
-        return encoded_name + encoded_scope + '\0'
-    else:
+    if not scope:
         return encoded_name + '\0'
+    encoded_scope = ''
+    for s in string.split(scope, '.'):
+        encoded_scope = encoded_scope + chr(len(s)) + s
+    return encoded_name + encoded_scope + '\0'
 
 # Internal method for use in encode_name()
 def _do_first_level_encoding(m):
@@ -622,16 +630,15 @@ def decode_name(name):
     decoded_name = re.sub('..', _do_first_level_decoding, name[1:33])
     if name[33] == '\0':
         return 34, decoded_name, ''
-    else:
-        decoded_domain = ''
-        offset = 34
-        while 1:
-            domain_length = ord(name[offset])
-            if domain_length == 0:
-                break
-            decoded_domain = '.' + name[offset:offset + domain_length]
-            offset += domain_length
-        return offset + 1, decoded_name, decoded_domain
+    decoded_domain = ''
+    offset = 34
+    while 1:
+        domain_length = ord(name[offset])
+        if domain_length == 0:
+            break
+        decoded_domain = f'.{name[offset:offset + domain_length]}'
+        offset += domain_length
+    return offset + 1, decoded_name, decoded_domain
 
 def _do_first_level_decoding(m):
     s = m.group(0)
@@ -664,11 +671,12 @@ class NetBIOSSessionPacket:
     def get_type(self):
         return self.type
     def rawData(self):
-        if self.type == NETBIOS_SESSION_MESSAGE:
-            data = pack('!BBH',self.type,self.length >> 16,self.length & 0xFFFF) + self._trailer
-        else:
-            data = pack('!BBH',self.type,self.flags,self.length) + self._trailer
-        return data
+        return (
+            pack('!BBH', self.type, self.length >> 16, self.length & 0xFFFF)
+            + self._trailer
+            if self.type == NETBIOS_SESSION_MESSAGE
+            else pack('!BBH', self.type, self.flags, self.length) + self._trailer
+        )
     def set_trailer(self,data):
         self._trailer = data
         self.length = len(data)
@@ -689,17 +697,15 @@ class NetBIOSSession:
         # if destination port SMB_SESSION_PORT and remote name *SMBSERVER, we're changing it to its IP address
         # helping solving the client mistake ;)
         if remote_name == '*SMBSERVER' and sess_port == SMB_SESSION_PORT:
-            remote_name = remote_host 
+            remote_name = remote_host
         # If remote name is *SMBSERVER let's try to query its name.. if can't be guessed, continue and hope for the best
         if remote_name == '*SMBSERVER':
             nb = NetBIOS()
-            
+
             try:
                 res = nb.getnetbiosname(remote_host)
             except:
                 res = None
-                pass 
-            
             if res is not None:
                 remote_name = res
 
@@ -789,11 +795,9 @@ class NetBIOSUDPSession(NetBIOSSession):
         pass
 
     def next_id(self):
-        if hasattr(self, '__dgram_id'):
-            answer = self.__dgram_id
-        else:
+        if not hasattr(self, '__dgram_id'):
             self.__dgram_id = randint(1,65535)
-            answer = self.__dgram_id
+        answer = self.__dgram_id
         self.__dgram_id += 1
         return answer
 
@@ -844,7 +848,7 @@ class NetBIOSTCPSession(NetBIOSSession):
             sock = socket.socket(af, socktype, proto)
             sock.connect(sa)
         except socket.error as e:
-            raise socket.error("Connection error (%s:%s)" % (peer[0], peer[1]), e)
+            raise socket.error(f"Connection error ({peer[0]}:{peer[1]})", e)
         return sock
 
     def send_packet(self, data):
@@ -871,9 +875,6 @@ class NetBIOSTCPSession(NetBIOSSession):
                 raise NetBIOSError( 'Cannot request session', ERRCLASS_SESSION, ord(p.get_trailer()[0]))
             elif p.get_type() == NETBIOS_SESSION_POSITIVE_RESPONSE:
                 break
-            else:
-                # Ignore all other messages, most probably keepalive messages
-                pass
 
     def polling_read(self, read_length, timeout):
         data = ''
@@ -887,14 +888,13 @@ class NetBIOSTCPSession(NetBIOSSession):
         while bytes_left > 0:
             try:
                 ready, _, _ = select.select([self._sock.fileno() ], [ ], [ ], 0)
-                
+
                 if not ready:
                     if time_left <= 0:
                         raise NetBIOSTimeout
-                    else:
-                        time.sleep(CHUNK_TIME)
-                        time_left -= CHUNK_TIME
-                        continue
+                    time.sleep(CHUNK_TIME)
+                    time_left -= CHUNK_TIME
+                    continue
 
                 received = self._sock.recv(bytes_left)
                 if len(received) == 0:
@@ -903,7 +903,7 @@ class NetBIOSTCPSession(NetBIOSSession):
                 data = data + received
                 bytes_left = read_length - len(data)
             except select.error as ex:
-                if ex[0] != errno.EINTR and ex[0] != errno.EAGAIN:
+                if ex[0] not in [errno.EINTR, errno.EAGAIN]:
                     raise NetBIOSError( 'Error occurs while reading from remote', ERRCLASS_OS, ex[0])
 
         return data
@@ -926,7 +926,7 @@ class NetBIOSTCPSession(NetBIOSSession):
                 data = data + received
                 bytes_left = read_length - len(data)
             except select.error as ex:
-                if ex[0] != errno.EINTR and ex[0] != errno.EAGAIN:
+                if ex[0] not in [errno.EINTR, errno.EAGAIN]:
                     raise NetBIOSError( 'Error occurs while reading from remote', ERRCLASS_OS, ex[0])
 
         return data
@@ -936,9 +936,8 @@ class NetBIOSTCPSession(NetBIOSSession):
         type, flags, length = unpack('>ccH', data)
         if ord(type) == NETBIOS_SESSION_MESSAGE:
             length |= ord(flags) << 16
-        else:
-            if ord(flags) & 0x01:
-                length |= 0x10000
+        elif ord(flags) & 0x01:
+            length |= 0x10000
         data2 = self.read_function(length, timeout)
 
         return data + data2

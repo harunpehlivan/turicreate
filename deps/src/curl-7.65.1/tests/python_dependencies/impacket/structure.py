@@ -85,8 +85,8 @@ class Structure:
             self.data = None
 
     @classmethod
-    def fromFile(self, file):
-        answer = self()
+    def fromFile(cls, file):
+        answer = cls()
         answer.fromString(file.read(len(answer)))
         return answer
 
@@ -98,7 +98,7 @@ class Structure:
 
     def packField(self, fieldName, format = None):
         if self.debug:
-            print("packField( %s | %s )" % (fieldName, format))
+            print(f"packField( {fieldName} | {format} )")
 
         if format is None:
             format = self.formatForField(fieldName)
@@ -126,10 +126,9 @@ class Structure:
                 else:
                     e.args += ("When packing field '%s | %s' in %s" % (field[0], field[1], self.__class__),)
                 raise
-            if self.alignment:
-                if len(data) % self.alignment:
-                    data += ('\x00'*self.alignment)[:-(len(data) % self.alignment)]
-            
+            if self.alignment and len(data) % self.alignment:
+                data += ('\x00'*self.alignment)[:-(len(data) % self.alignment)]
+
         #if len(data) % self.alignment: data += ('\x00'*self.alignment)[:-(len(data) % self.alignment)]
         return data
 
@@ -188,7 +187,7 @@ class Structure:
             return ''
 
         # quote specifier
-        if format[:1] == "'" or format[:1] == '"':
+        if format[:1] in ["'", '"']:
             return format[1:]
 
         # code specifier
@@ -198,7 +197,7 @@ class Structure:
                 return self.pack(two[0], data)
             except:
                 fields = {'self':self}
-                fields.update(self.fields)
+                fields |= self.fields
                 return self.pack(two[0], eval(two[1], {}, fields))
 
         # address specifier
@@ -223,15 +222,12 @@ class Structure:
         # array specifier
         two = format.split('*')
         if len(two) == 2:
-            answer = ''
-            for each in data:
-                answer += self.pack(two[1], each)
+            answer = ''.join(self.pack(two[1], each) for each in data)
             if two[0]:
-                if two[0].isdigit():
-                    if int(two[0]) != len(data):
-                        raise Exception("Array field has a constant size, and it doesn't match the actual value")
-                else:
+                if not two[0].isdigit():
                     return self.pack(two[0], len(data))+answer
+                if int(two[0]) != len(data):
+                    raise Exception("Array field has a constant size, and it doesn't match the actual value")
             return answer
 
         # "printf" string specifier
@@ -255,16 +251,12 @@ class Structure:
                 data += '\0'
             l = pack('<L', len(data)/2)
             return '%s\0\0\0\0%s%s' % (l,l,data)
-                    
+
         if data is None:
             raise Exception("Trying to pack None")
-        
-        # literal specifier
-        if format[:1] == ':':
-            return str(data)
 
-        # struct like specifier
-        return pack(format, data)
+        # literal specifier
+        return str(data) if format[:1] == ':' else pack(format, data)
 
     def unpack(self, format, data, dataClassOrCode = str, field = None):
         if self.debug:
@@ -272,21 +264,18 @@ class Structure:
 
         if field:
             addressField = self.findAddressFieldFor(field)
-            if addressField is not None:
-                if not self[addressField]:
-                    return
+            if addressField is not None and not self[addressField]:
+                return
 
-        # void specifier
         if format[:1] == '_':
-            if dataClassOrCode != str:
-                fields = {'self':self, 'inputDataLeft':data}
-                fields.update(self.fields)
-                return eval(dataClassOrCode, {}, fields)
-            else:
+            if dataClassOrCode == str:
                 return None
 
+            fields = {'self':self, 'inputDataLeft':data}
+            fields |= self.fields
+            return eval(dataClassOrCode, {}, fields)
         # quote specifier
-        if format[:1] == "'" or format[:1] == '"':
+        if format[:1] in ["'", '"']:
             answer = format[1:]
             if answer != data:
                 raise Exception("Unpacked data doesn't match constant value '%r' should be '%r'" % (data, answer))
@@ -350,26 +339,21 @@ class Structure:
             return data[12:12+l*2]
 
         # literal specifier
-        if format == ':':
-            return dataClassOrCode(data)
-
-        # struct like specifier
-        return unpack(format, data)[0]
+        return dataClassOrCode(data) if format == ':' else unpack(format, data)[0]
 
     def calcPackSize(self, format, data, field = None):
 #        # print "  calcPackSize  %s:%r" %  (format, data)
         if field:
             addressField = self.findAddressFieldFor(field)
-            if addressField is not None:
-                if not self[addressField]:
-                    return 0
+            if addressField is not None and not self[addressField]:
+                return 0
 
         # void specifier
         if format[:1] == '_':
             return 0
 
         # quote specifier
-        if format[:1] == "'" or format[:1] == '"':
+        if format[:1] in ["'", '"']:
             return len(format)-1
 
         # address specifier
@@ -421,11 +405,7 @@ class Structure:
             return 12+l+l % 2
 
         # literal specifier
-        if format[:1] == ':':
-            return len(data)
-
-        # struct like specifier
-        return calcsize(format)
+        return len(data) if format[:1] == ':' else calcsize(format)
 
     def calcUnpackSize(self, format, data, field = None):
         if self.debug:
@@ -436,9 +416,8 @@ class Structure:
             return 0
 
         addressField = self.findAddressFieldFor(field)
-        if addressField is not None:
-            if not self[addressField]:
-                return 0
+        if addressField is not None and not self[addressField]:
+            return 0
 
         try:
             lengthField = self.findLengthFieldFor(field)
@@ -447,9 +426,9 @@ class Structure:
             pass
 
         # XXX: Try to match to actual values, raise if no match
-        
+
         # quote specifier
-        if format[:1] == "'" or format[:1] == '"':
+        if format[:1] in ["'", '"']:
             return len(format)-1
 
         # address specifier
@@ -505,11 +484,7 @@ class Structure:
             return 12+l*2
 
         # literal specifier
-        if format[:1] == ':':
-            return len(data)
-
-        # struct like specifier
-        return calcsize(format)
+        return len(data) if format[:1] == ':' else calcsize(format)
 
     def calcPackFieldSize(self, fieldName, format = None):
         if format is None:
@@ -521,36 +496,41 @@ class Structure:
         for field in self.commonHdr+self.structure:
             if field[0] == fieldName:
                 return field[1]
-        raise Exception("Field %s not found" % fieldName)
+        raise Exception(f"Field {fieldName} not found")
 
     def findAddressFieldFor(self, fieldName):
-        descriptor = '&%s' % fieldName
+        descriptor = f'&{fieldName}'
         l = len(descriptor)
-        for field in self.commonHdr+self.structure:
-            if field[1][-l:] == descriptor:
-                return field[0]
-        return None
+        return next(
+            (
+                field[0]
+                for field in self.commonHdr + self.structure
+                if field[1][-l:] == descriptor
+            ),
+            None,
+        )
         
     def findLengthFieldFor(self, fieldName):
-        descriptor = '-%s' % fieldName
+        descriptor = f'-{fieldName}'
         l = len(descriptor)
-        for field in self.commonHdr+self.structure:
-            if field[1][-l:] == descriptor:
-                return field[0]
-        return None
+        return next(
+            (
+                field[0]
+                for field in self.commonHdr + self.structure
+                if field[1][-l:] == descriptor
+            ),
+            None,
+        )
         
     def zeroValue(self, format):
         two = format.split('*')
-        if len(two) == 2:
-            if two[0].isdigit():
-                return (self.zeroValue(two[1]),)*int(two[0])
-                        
-        if not format.find('*') == -1: return ()
+        if len(two) == 2 and two[0].isdigit():
+            return (self.zeroValue(two[1]),)*int(two[0])
+
+        if format.find('*') != -1: return ()
         if 's' in format: return ''
         if format in ['z',':','u']: return ''
-        if format == 'w': return '\x00\x00'
-
-        return 0
+        return '\x00\x00' if format == 'w' else 0
 
     def clear(self):
         for field in self.commonHdr + self.structure:
@@ -593,7 +573,7 @@ class _StructureTest:
         print()
         print("-"*70)
         testName = self.__class__.__name__
-        print("starting test: %s....." % testName)
+        print(f"starting test: {testName}.....")
         a = self.create()
         self.populate(a)
         a.dump("packing.....")
