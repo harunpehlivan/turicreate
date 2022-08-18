@@ -527,9 +527,9 @@ def splitIdentifier(str):
 def addWord(word, module, symbol, relevance):
     global wordsDict
 
-    if word == None or len(word) < 3:
+    if word is None or len(word) < 3:
         return -1
-    if module == None or symbol == None:
+    if module is None or symbol is None:
         return -1
     if dropWords.has_key(word):
         return 0
@@ -538,15 +538,15 @@ def addWord(word, module, symbol, relevance):
 
     if wordsDict.has_key(word):
         d = wordsDict[word]
-	if d == None:
-	    return 0
-	if len(d) > 500:
-	    wordsDict[word] = None
-	    return 0
-	try:
-	    relevance = relevance + d[(module, symbol)]
-	except:
-	    pass
+        if d is None:
+            return 0
+        if len(d) > 500:
+            wordsDict[word] = None
+            return 0
+        try:
+            relevance = relevance + d[(module, symbol)]
+        except:
+            pass
     else:
         wordsDict[word] = {}
     wordsDict[word][(module, symbol)] = relevance
@@ -673,8 +673,7 @@ def addStringArchive(str, id, relevance):
 
 def loadAPI(filename):
     doc = libxml2.parseFile(filename)
-    print "loaded %s" % (filename)
-    return doc
+    return libxml2.parseFile(filename)
 
 def foundExport(file, symbol):
     if file == None:
@@ -949,8 +948,8 @@ import glob
 def analyzeHTMLText(doc, resource, p, section, id):
     words = 0
     try:
-	content = p.content
-	words = words + addStringHTML(content, resource, id, section, 5)
+        content = p.content
+        words += addStringHTML(content, resource, id, section, 5)
     except:
         return -1
     return words
@@ -958,8 +957,8 @@ def analyzeHTMLText(doc, resource, p, section, id):
 def analyzeHTMLPara(doc, resource, p, section, id):
     words = 0
     try:
-	content = p.content
-	words = words + addStringHTML(content, resource, id, section, 5)
+        content = p.content
+        words += addStringHTML(content, resource, id, section, 5)
     except:
         return -1
     return words
@@ -967,8 +966,8 @@ def analyzeHTMLPara(doc, resource, p, section, id):
 def analyzeHTMLPre(doc, resource, p, section, id):
     words = 0
     try:
-	content = p.content
-	words = words + addStringHTML(content, resource, id, section, 5)
+        content = p.content
+        words += addStringHTML(content, resource, id, section, 5)
     except:
         return -1
     return words
@@ -976,8 +975,8 @@ def analyzeHTMLPre(doc, resource, p, section, id):
 def analyzeHTML(doc, resource, p, section, id):
     words = 0
     try:
-	content = p.content
-	words = words + addStringHTML(content, resource, id, section, 5)
+        content = p.content
+        words += addStringHTML(content, resource, id, section, 5)
     except:
         return -1
     return words
@@ -1048,13 +1047,12 @@ def analyzeHTMLPages():
 import time
 
 def getXMLDateArchive(t = None):
-    if t == None:
-	t = time.time()
+    if t is None:
+        t = time.time()
     T = time.gmtime(t)
     month = time.strftime("%B", T)
     year = T[0]
-    url = "http://mail.gnome.org/archives/xml/%d-%s/date.html" % (year, month)
-    return url
+    return "http://mail.gnome.org/archives/xml/%d-%s/date.html" % (year, month)
 
 def scanXMLMsgArchive(url, title, force = 0):
     if url == None or title == None:
@@ -1134,41 +1132,41 @@ def analyzeArchives(t = None, force = 0):
     global wordsDictArchive
 
     ret = scanXMLDateArchive(t, force)
-    print "Indexed %d words in %d archive pages" % (len(wordsDictArchive), ret)
+    global wordsDictArchive
 
     i = 0
     skipped = 0
     for word in wordsDictArchive.keys():
-	refs = wordsDictArchive[word]
-	if refs  == None:
-	    skipped = skipped + 1
-	    continue;
-	for id in refs.keys():
-	    relevance = refs[id]
-	    updateWordArchive(word, id, relevance)
-	    i = i + 1
+        refs = wordsDictArchive[word]
+        if refs is None:
+            skipped = skipped + 1
+            continue;
+        for id in refs.keys():
+            relevance = refs[id]
+            updateWordArchive(word, id, relevance)
+            i = i + 1
 
-    print "Found %d associations in HTML pages" % (i)
+    global wordsDictArchive
 
 def analyzeHTMLTop():
     global wordsDictHTML
 
     ret = analyzeHTMLPages()
-    print "Indexed %d words in %d HTML pages" % (len(wordsDictHTML), ret)
+    global wordsDictHTML
 
     i = 0
     skipped = 0
     for word in wordsDictHTML.keys():
-	refs = wordsDictHTML[word]
-	if refs  == None:
-	    skipped = skipped + 1
-	    continue;
-	for resource in refs.keys():
-	    (relevance, id, section) = refs[resource]
-	    updateWordHTML(word, resource, section, id, relevance)
-	    i = i + 1
+        refs = wordsDictHTML[word]
+        if refs is None:
+            skipped = skipped + 1
+            continue;
+        for resource in refs.keys():
+            (relevance, id, section) = refs[resource]
+            updateWordHTML(word, resource, section, id, relevance)
+            i = i + 1
 
-    print "Found %d associations in HTML pages" % (i)
+    global wordsDictHTML
 
 def analyzeAPITop():
     global wordsDict

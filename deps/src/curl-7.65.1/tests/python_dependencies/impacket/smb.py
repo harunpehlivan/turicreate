@@ -505,23 +505,18 @@ class SessionError(Exception):
         return self.error_code
 
     def __str__( self ):
-        error_class = SessionError.error_classes.get( self.error_class, None )
-        if not error_class:
-            error_code_str = self.error_code
-            error_class_str = self.error_class
-        else:
+        if error_class := SessionError.error_classes.get(self.error_class, None):
             error_class_str = error_class[0]
             error_code = error_class[1].get( self.error_code, None )
-            if not error_code:
-                error_code_str = self.error_code
-            else:
-                error_code_str = '%s(%s)' % error_code
-
+            error_code_str = '%s(%s)' % error_code if error_code else self.error_code
+        else:
+            error_code_str = self.error_code
+            error_class_str = self.error_class
         if self.nt_status:
             return 'SMB SessionError: %s(%s)' % nt_errors.ERROR_MESSAGES[self.error_code]
         else:
             # Fall back to the old format
-            return 'SMB SessionError: class: %s, code: %s' % (error_class_str, error_code_str)
+            return f'SMB SessionError: class: {error_class_str}, code: {error_code_str}'
 
 
 # Raised when an supported feature is present/required in the protocol but is not
@@ -545,7 +540,12 @@ class SharedDevice:
         return self.__comment
 
     def __repr__(self):
-        return '<SharedDevice instance: name=' + self.__name + ', type=' + str(self.__type) + ', comment="' + self.__comment + '">'
+        return (
+            f'<SharedDevice instance: name={self.__name}, type={str(self.__type)}'
+            + ', comment="'
+            + self.__comment
+            + '">'
+        )
 
 
 # Contains information about the shared file/directory
@@ -676,10 +676,10 @@ class NewSMBPacket(Structure):
     def __init__(self, **kargs):
         Structure.__init__(self, **kargs)
 
-        if ('Flags2' in self.fields) is False:
-             self['Flags2'] = 0
-        if ('Flags1' in self.fields) is False:
-             self['Flags1'] = 0
+        if 'Flags2' not in self.fields:
+            self['Flags2'] = 0
+        if 'Flags1' not in self.fields:
+            self['Flags1'] = 0
 
         if 'data' not in kargs:
             self['Data'] = []
@@ -700,18 +700,16 @@ class NewSMBPacket(Structure):
         return self['ErrorClass'] == 0x16 and self['ErrorCode'] == 0xc000
 
     def isValidAnswer(self, cmd):
-        # this was inside a loop reading more from the net (with recv_packet(None))
-        if self['Command'] == cmd:
-            if (self['ErrorClass'] == 0x00 and
-                self['ErrorCode']  == 0x00):
-                    return 1
-            elif self.isMoreData():
-                return 1
-            elif self.isMoreProcessingRequired():
-                return 1
-            raise SessionError("SMB Library Error", self['ErrorClass'] + (self['_reserved'] << 8), self['ErrorCode'], self['Flags2'] & SMB.FLAGS2_NT_STATUS)
-        else:
+        if self['Command'] != cmd:
             raise UnsupportedFeature("Unexpected answer from server: Got %d, Expected %d" % (self['Command'], cmd))
+        if (self['ErrorClass'] == 0x00 and
+            self['ErrorCode']  == 0x00):
+                return 1
+        elif self.isMoreData():
+            return 1
+        elif self.isMoreProcessingRequired():
+            return 1
+        raise SessionError("SMB Library Error", self['ErrorClass'] + (self['_reserved'] << 8), self['ErrorCode'], self['Flags2'] & SMB.FLAGS2_NT_STATUS)
 
 
 class SMBCommand(Structure):
@@ -2374,11 +2372,7 @@ class SMB:
         self.__flags1 = SMB.FLAGS1_PATHCASELESS | SMB.FLAGS1_CANONICALIZED_PATHS
         self.__flags2 = SMB.FLAGS2_EXTENDED_SECURITY | SMB.FLAGS2_NT_STATUS | SMB.FLAGS2_LONG_NAMES
 
-        if timeout is None:
-            self.__timeout = 60
-        else:
-            self.__timeout = timeout
-
+        self.__timeout = 60 if timeout is None else timeout
         # If port 445 and the name sent is *SMBSERVER we're setting the name to the IP. 
         # This is to help some old applications still believing 
         # *SMSBSERVER will work against modern OSes. If port is NETBIOS_SESSION_PORT the user better 
@@ -2514,10 +2508,7 @@ class SMB:
         m.update( str(packet) )
         # Replace sequence with acual hash
         packet['SecurityFeatures'] = m.digest()[:8]
-        if self._SignatureVerificationEnabled:
-           self._SignSequenceNumber +=1
-        else:
-           self._SignSequenceNumber +=2
+        self._SignSequenceNumber += 1 if self._SignatureVerificationEnabled else 2
 
     def checkSignSMB(self, packet, signingSessionKey, signingChallengeResponse):
         # Let's check
@@ -2546,47 +2537,46 @@ class SMB:
     def isValidAnswer(s, cmd):
         while 1:
             if s.rawData():
-                if s.get_command() == cmd:
-                    if s.get_error_class() == 0x00 and s.get_error_code() == 0x00:
-                        return 1
-                    else:
-                        raise SessionError( "SMB Library Error", s.get_error_class()+ (s.get_reserved() << 8), s.get_error_code() , s.get_flags2() & SMB.FLAGS2_NT_STATUS)
-                else:
+                if s.get_command() != cmd:
                     break
+                if s.get_error_class() == 0x00 and s.get_error_code() == 0x00:
+                    return 1
+                else:
+                    raise SessionError( "SMB Library Error", s.get_error_class()+ (s.get_reserved() << 8), s.get_error_code() , s.get_flags2() & SMB.FLAGS2_NT_STATUS)
         return 0
 
     def neg_session(self, extended_security = True, negPacket = None):
         def parsePacket(smb):
-            if smb.isValidAnswer(SMB.SMB_COM_NEGOTIATE):
-                sessionResponse = SMBCommand(smb['Data'][0])
-                self._dialects_parameters = SMBNTLMDialect_Parameters(sessionResponse['Parameters'])
-                self._dialects_data = SMBNTLMDialect_Data()
-                self._dialects_data['ChallengeLength'] = self._dialects_parameters['ChallengeLength']
-                self._dialects_data.fromString(sessionResponse['Data'])
-                if self._dialects_parameters['Capabilities'] & SMB.CAP_EXTENDED_SECURITY:
-                    # Whether we choose it or it is enforced by the server, we go for extended security
-                    self._dialects_parameters = SMBExtended_Security_Parameters(sessionResponse['Parameters'])
-                    self._dialects_data = SMBExtended_Security_Data(sessionResponse['Data'])
-                    # Let's setup some variable for later use
-                    if self._dialects_parameters['SecurityMode'] & SMB.SECURITY_SIGNATURES_REQUIRED:
-                         self._SignatureRequired = True
-
-                    # Interestingly, the security Blob might be missing sometimes.
-                    #spnego = SPNEGO_NegTokenInit(self._dialects_data['SecurityBlob'])
-                    #for i in spnego['MechTypes']:
-                    #      print "Mech Found: %s" % MechTypes[i]
-                    return 1
-
-                # If not, let's try the old way
-                else:
-                    if self._dialects_data['ServerName'] is not None:
-                        self.__server_name = self._dialects_data['ServerName']
-
-                    if self._dialects_parameters['DialectIndex'] == 0xffff:
-                        raise UnsupportedFeature("Remote server does not know NT LM 0.12")
-                    return 1
-            else:
+            if not smb.isValidAnswer(SMB.SMB_COM_NEGOTIATE):
                 return 0
+
+            sessionResponse = SMBCommand(smb['Data'][0])
+            self._dialects_parameters = SMBNTLMDialect_Parameters(sessionResponse['Parameters'])
+            self._dialects_data = SMBNTLMDialect_Data()
+            self._dialects_data['ChallengeLength'] = self._dialects_parameters['ChallengeLength']
+            self._dialects_data.fromString(sessionResponse['Data'])
+            if self._dialects_parameters['Capabilities'] & SMB.CAP_EXTENDED_SECURITY:
+                # Whether we choose it or it is enforced by the server, we go for extended security
+                self._dialects_parameters = SMBExtended_Security_Parameters(sessionResponse['Parameters'])
+                self._dialects_data = SMBExtended_Security_Data(sessionResponse['Data'])
+                # Let's setup some variable for later use
+                if self._dialects_parameters['SecurityMode'] & SMB.SECURITY_SIGNATURES_REQUIRED:
+                     self._SignatureRequired = True
+
+                # Interestingly, the security Blob might be missing sometimes.
+                #spnego = SPNEGO_NegTokenInit(self._dialects_data['SecurityBlob'])
+                #for i in spnego['MechTypes']:
+                #      print "Mech Found: %s" % MechTypes[i]
+                return 1
+
+            # If not, let's try the old way
+            else:
+                if self._dialects_data['ServerName'] is not None:
+                    self.__server_name = self._dialects_data['ServerName']
+
+                if self._dialects_parameters['DialectIndex'] == 0xffff:
+                    raise UnsupportedFeature("Remote server does not know NT LM 0.12")
+                return 1
 
         if negPacket is None:
             smb = NewSMBPacket()
@@ -2612,11 +2602,9 @@ class SMB:
         LOG.warning("[MS-CIFS] This is an original Core Protocol command.This command has been deprecated.Client Implementations SHOULD use SMB_COM_TREE_CONNECT_ANDX")
 
         # return 0x800
-        if password:
-            # Password is only encrypted if the server passed us an "encryption" during protocol dialect
-            if self._dialects_parameters['ChallengeLength'] > 0:
-                # this code is untested
-                password = self.get_ntlmv1_response(ntlm.compute_lmhash(password))
+        if password and self._dialects_parameters['ChallengeLength'] > 0:
+            # this code is untested
+            password = self.get_ntlmv1_response(ntlm.compute_lmhash(password))
 
         if not unicode_support:
             if unicode_convert:
@@ -2662,11 +2650,7 @@ class SMB:
             else:
                 raise Exception('SMB: Can\t convert path from unicode!')
 
-        if smb_packet is None:
-            smb = NewSMBPacket()
-        else:
-            smb = smb_packet
-
+        smb = NewSMBPacket() if smb_packet is None else smb_packet
         # Just in case this came with the full path ,let's just leave 
         # the sharename, we'll take care of the rest
 
@@ -2844,9 +2828,7 @@ class SMB:
 
         self.sendSMB(smb)
         smb = self.recvSMB()
-        if smb.isValidAnswer(SMB.SMB_COM_CLOSE):
-           return 1
-        return 0
+        return 1 if smb.isValidAnswer(SMB.SMB_COM_CLOSE) else 0
 
     def send_trans(self, tid, setup, name, param, data, noAnswer = 0):
         smb = NewSMBPacket()

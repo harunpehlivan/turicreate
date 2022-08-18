@@ -92,9 +92,7 @@ def escape(raw):
     return raw
 
 def uniq(items):
-    d = {}
-    for item in items:
-        d[item]=1
+    d = {item: 1 for item in items}
     return list(d.keys())
 
 class identifier:
@@ -108,7 +106,7 @@ class identifier:
         self.extra = extra
         self.lineno = lineno
         self.static = 0
-        if conditionals == None or len(conditionals) == 0:
+        if conditionals is None or len(conditionals) == 0:
             self.conditionals = None
         else:
             self.conditionals = conditionals[:]
@@ -117,17 +115,17 @@ class identifier:
                                          extra, conditionals)))
 
     def __repr__(self):
-        r = "%s %s:" % (self.type, self.name)
+        r = f"{self.type} {self.name}:"
         if self.static:
-            r = r + " static"
+            r = f"{r} static"
         if self.module != None:
-            r = r + " from %s" % (self.module)
+            r = r + f" from {self.module}"
         if self.info != None:
-            r = r + " " +  repr(self.info)
+            r = f"{r} {repr(self.info)}"
         if self.extra != None:
-            r = r + " " + repr(self.extra)
+            r = f"{r} {repr(self.extra)}"
         if self.conditionals != None:
-            r = r + " " + repr(self.conditionals)
+            r = f"{r} {repr(self.conditionals)}"
         return r
 
 
@@ -146,7 +144,7 @@ class identifier:
     def set_static(self, static):
         self.static = static
     def set_conditionals(self, conditionals):
-        if conditionals == None or len(conditionals) == 0:
+        if conditionals is None or len(conditionals) == 0:
             self.conditionals = None
         else:
             self.conditionals = conditionals[:]
@@ -175,11 +173,11 @@ class identifier:
         if self.name == debugsym:
             print("=> update %s : %s" % (debugsym, (module, type, info,
                                          extra, conditionals)))
-        if header != None and self.header == None:
+        if header != None and self.header is None:
             self.set_header(module)
-        if module != None and (self.module == None or self.header == self.module):
+        if module != None and (self.module is None or self.header == self.module):
             self.set_module(module)
-        if type != None and self.type == None:
+        if type != None and self.type is None:
             self.set_type(type)
         if info != None:
             self.set_info(info)
@@ -203,7 +201,7 @@ class index:
         self.info = {}
 
     def add_ref(self, name, header, module, static, type, lineno, info=None, extra=None, conditionals = None):
-        if name[0:2] == '__':
+        if name[:2] == '__':
             return None
         d = None
         try:
@@ -220,12 +218,12 @@ class index:
             self.references[name] = d
 
         if name == debugsym:
-            print("New ref: %s" % (d))
+            print(f"New ref: {d}")
 
         return d
 
     def add(self, name, header, module, static, type, lineno, info=None, extra=None, conditionals = None):
-        if name[0:2] == '__':
+        if name[:2] == '__':
             return None
         d = None
         try:
@@ -259,88 +257,99 @@ class index:
                 print("Unable to register type ", type)
 
         if name == debugsym:
-            print("New symbol: %s" % (d))
+            print(f"New symbol: {d}")
 
         return d
 
     def merge(self, idx):
         for id in list(idx.functions.keys()):
-              #
-              # macro might be used to override functions or variables
-              # definitions
-              #
-             if id in self.macros:
-                 del self.macros[id]
-             if id in self.functions:
-                 print("function %s from %s redeclared in %s" % (
-                    id, self.functions[id].header, idx.functions[id].header))
-             else:
-                 self.functions[id] = idx.functions[id]
-                 self.identifiers[id] = idx.functions[id]
+          #
+          # macro might be used to override functions or variables
+          # definitions
+          #
+            if id in self.macros:
+                del self.macros[id]
+            if id in self.functions:
+                print(
+                    f"function {id} from {self.functions[id].header} redeclared in {idx.functions[id].header}"
+                )
+
+            else:
+                self.functions[id] = idx.functions[id]
+                self.identifiers[id] = idx.functions[id]
         for id in list(idx.variables.keys()):
-              #
-              # macro might be used to override functions or variables
-              # definitions
-              #
-             if id in self.macros:
-                 del self.macros[id]
-             if id in self.variables:
-                 print("variable %s from %s redeclared in %s" % (
-                    id, self.variables[id].header, idx.variables[id].header))
-             else:
-                 self.variables[id] = idx.variables[id]
-                 self.identifiers[id] = idx.variables[id]
+          #
+          # macro might be used to override functions or variables
+          # definitions
+          #
+            if id in self.macros:
+                del self.macros[id]
+            if id in self.variables:
+                print(
+                    f"variable {id} from {self.variables[id].header} redeclared in {idx.variables[id].header}"
+                )
+
+            else:
+                self.variables[id] = idx.variables[id]
+                self.identifiers[id] = idx.variables[id]
         for id in list(idx.structs.keys()):
-             if id in self.structs:
-                 print("struct %s from %s redeclared in %s" % (
-                    id, self.structs[id].header, idx.structs[id].header))
-             else:
-                 self.structs[id] = idx.structs[id]
-                 self.identifiers[id] = idx.structs[id]
+            if id in self.structs:
+                print(
+                    f"struct {id} from {self.structs[id].header} redeclared in {idx.structs[id].header}"
+                )
+
+            else:
+                self.structs[id] = idx.structs[id]
+                self.identifiers[id] = idx.structs[id]
         for id in list(idx.typedefs.keys()):
-             if id in self.typedefs:
-                 print("typedef %s from %s redeclared in %s" % (
-                    id, self.typedefs[id].header, idx.typedefs[id].header))
-             else:
-                 self.typedefs[id] = idx.typedefs[id]
-                 self.identifiers[id] = idx.typedefs[id]
+            if id in self.typedefs:
+                print(
+                    f"typedef {id} from {self.typedefs[id].header} redeclared in {idx.typedefs[id].header}"
+                )
+
+            else:
+                self.typedefs[id] = idx.typedefs[id]
+                self.identifiers[id] = idx.typedefs[id]
         for id in list(idx.macros.keys()):
-              #
-              # macro might be used to override functions or variables
-              # definitions
-              #
-             if id in self.variables:
-                 continue
-             if id in self.functions:
-                 continue
-             if id in self.enums:
-                 continue
-             if id in self.macros:
-                 print("macro %s from %s redeclared in %s" % (
-                    id, self.macros[id].header, idx.macros[id].header))
-             else:
-                 self.macros[id] = idx.macros[id]
-                 self.identifiers[id] = idx.macros[id]
+          #
+          # macro might be used to override functions or variables
+          # definitions
+          #
+            if id in self.variables:
+                continue
+            if id in self.functions:
+                continue
+            if id in self.enums:
+                continue
+            if id in self.macros:
+                print(
+                    f"macro {id} from {self.macros[id].header} redeclared in {idx.macros[id].header}"
+                )
+
+            else:
+                self.macros[id] = idx.macros[id]
+                self.identifiers[id] = idx.macros[id]
         for id in list(idx.enums.keys()):
-             if id in self.enums:
-                 print("enum %s from %s redeclared in %s" % (
-                    id, self.enums[id].header, idx.enums[id].header))
-             else:
-                 self.enums[id] = idx.enums[id]
-                 self.identifiers[id] = idx.enums[id]
+            if id in self.enums:
+                print(
+                    f"enum {id} from {self.enums[id].header} redeclared in {idx.enums[id].header}"
+                )
+
+            else:
+                self.enums[id] = idx.enums[id]
+                self.identifiers[id] = idx.enums[id]
 
     def merge_public(self, idx):
         for id in list(idx.functions.keys()):
-             if id in self.functions:
+            if id in self.functions:
                  # check that function condition agrees with header
-                 if idx.functions[id].conditionals != \
-                    self.functions[id].conditionals:
-                     print("Header condition differs from Function for %s:" \
-                        % id)
-                     print("  H: %s" % self.functions[id].conditionals)
-                     print("  C: %s" % idx.functions[id].conditionals)
-                 up = idx.functions[id]
-                 self.functions[id].update(None, up.module, up.type, up.info, up.extra)
+                if idx.functions[id].conditionals != \
+                        self.functions[id].conditionals:
+                    print(f"Header condition differs from Function for {id}:")
+                    print(f"  H: {self.functions[id].conditionals}")
+                    print(f"  C: {idx.functions[id].conditionals}")
+                up = idx.functions[id]
+                self.functions[id].update(None, up.module, up.type, up.info, up.extra)
          #     else:
          #         print "Function %s from %s is not declared in headers" % (
          #                id, idx.functions[id].module)
@@ -378,7 +387,7 @@ class CLexer:
 
     def getline(self):
         line = ''
-        while line == '':
+        while not line:
             line = self.input.readline()
             if not line:
                 return None
@@ -392,11 +401,10 @@ class CLexer:
                 n = self.input.readline()
                 self.lineno = self.lineno + 1
                 n = n.lstrip()
-                n = n.rstrip()
-                if not n:
-                    break
-                else:
+                if n := n.rstrip():
                     line = line + n
+                else:
+                    break
         return line
 
     def getlineno(self):
@@ -417,7 +425,7 @@ class CLexer:
             else:
                 line = self.line
                 self.line = ""
-            if line == None:
+            if line is None:
                 return None
 
             if line[0] == '#':
@@ -425,7 +433,7 @@ class CLexer:
                                   line.split()))
                 break;
             l = len(line)
-            if line[0] == '"' or line[0] == "'":
+            if line[0] in ['"', "'"]:
                 end = line[0]
                 line = line[1:]
                 found = 0
@@ -441,12 +449,12 @@ class CLexer:
                             found = 1
                             break
                         if line[i] == '\\':
-                            i = i + 1
-                        i = i + 1
+                            i += 1
+                        i += 1
                     tok = tok + line
                     if found == 0:
                         line = self.getline()
-                        if line == None:
+                        if line is None:
                             return None
                 self.last = ('string', tok)
                 return self.last
@@ -465,13 +473,13 @@ class CLexer:
                             l = i
                             found = 1
                             break
-                        i = i + 1
+                        i += 1
                     if tok != "":
                         tok = tok + "\n"
                     tok = tok + line
                     if found == 0:
                         line = self.getline()
-                        if line == None:
+                        if line is None:
                             return None
                 self.last = ('comment', tok)
                 return self.last
@@ -489,52 +497,54 @@ class CLexer:
                     self.line = line[i:]
                     line = line[:i]
                     break
-                if line[i] == '"' or line[i] == "'":
+                if line[i] in ['"', "'"]:
                     self.line = line[i:]
                     line = line[:i]
                     break
-                i = i + 1
+                i += 1
             l = len(line)
             i = 0
             while i < l:
-                if line[i] == ' ' or line[i] == '\t':
-                    i = i + 1
+                if line[i] in [' ', '\t']:
+                    i += 1
                     continue
                 o = ord(line[i])
                 if (o >= 97 and o <= 122) or (o >= 65 and o <= 90) or \
-                   (o >= 48 and o <= 57):
+                       (o >= 48 and o <= 57):
                     s = i
                     while i < l:
                         o = ord(line[i])
-                        if (o >= 97 and o <= 122) or (o >= 65 and o <= 90) or \
-                           (o >= 48 and o <= 57) or \
-			   (" \t(){}:;,+-*/%&!|[]=><".find(line[i])) == -1:
-                            i = i + 1
+                        if (
+                            (o >= 97 and o <= 122)
+                            or (o >= 65 and o <= 90)
+                            or (o >= 48 and o <= 57)
+                            or line[i] not in " \t(){}:;,+-*/%&!|[]=><"
+                        ):
+                            i += 1
                         else:
                             break
                     self.tokens.append(('name', line[s:i]))
                     continue
-                if "(){}:;,[]".find(line[i]) != -1:
+                if line[i] in "(){}:;,[]":
 #                 if line[i] == '(' or line[i] == ')' or line[i] == '{' or \
 #                    line[i] == '}' or line[i] == ':' or line[i] == ';' or \
 #                    line[i] == ',' or line[i] == '[' or line[i] == ']':
                     self.tokens.append(('sep', line[i]))
-                    i = i + 1
+                    i += 1
                     continue
-                if "+-*><=/%&!|.".find(line[i]) != -1:
+                if line[i] in "+-*><=/%&!|.":
 #                 if line[i] == '+' or line[i] == '-' or line[i] == '*' or \
 #                    line[i] == '>' or line[i] == '<' or line[i] == '=' or \
 #                    line[i] == '/' or line[i] == '%' or line[i] == '&' or \
 #                    line[i] == '!' or line[i] == '|' or line[i] == '.':
                     if line[i] == '.' and  i + 2 < l and \
-                       line[i+1] == '.' and line[i+2] == '.':
+                           line[i+1] == '.' and line[i+2] == '.':
                         self.tokens.append(('name', '...'))
-                        i = i + 3
+                        i += 3
                         continue
 
                     j = i + 1
-                    if j < l and (
-                       "+-*><=/%&!|".find(line[j]) != -1):
+                    if j < l and line[j] in "+-*><=/%&!|":
 #                        line[j] == '+' or line[j] == '-' or line[j] == '*' or \
 #                        line[j] == '>' or line[j] == '<' or line[j] == '=' or \
 #                        line[j] == '/' or line[j] == '%' or line[j] == '&' or \
@@ -543,14 +553,17 @@ class CLexer:
                         i = j + 1
                     else:
                         self.tokens.append(('op', line[i]))
-                        i = i + 1
+                        i += 1
                     continue
                 s = i
                 while i < l:
                     o = ord(line[i])
-                    if (o >= 97 and o <= 122) or (o >= 65 and o <= 90) or \
-                       (o >= 48 and o <= 57) or (
-                        " \t(){}:;,+-*/%&!|[]=><".find(line[i]) == -1):
+                    if (
+                        (o >= 97 and o <= 122)
+                        or (o >= 65 and o <= 90)
+                        or (o >= 48 and o <= 57)
+                        or line[i] not in " \t(){}:;,+-*/%&!|[]=><"
+                    ):
 #                         line[i] != ' ' and line[i] != '\t' and
 #                         line[i] != '(' and line[i] != ')' and
 #                         line[i] != '{'  and line[i] != '}' and
@@ -563,7 +576,7 @@ class CLexer:
 #                         line[i] != ']' and line[i] != '=' and
 #                         line[i] != '*' and line[i] != '>' and
 #                         line[i] != '<'):
-                        i = i + 1
+                        i += 1
                     else:
                         break
                 self.tokens.append(('name', line[s:i]))
@@ -577,16 +590,10 @@ class CParser:
     """The C module parser"""
     def __init__(self, filename, idx = None):
         self.filename = filename
-        if len(filename) > 2 and filename[-2:] == '.h':
-            self.is_header = 1
-        else:
-            self.is_header = 0
+        self.is_header = 1 if len(filename) > 2 and filename[-2:] == '.h' else 0
         self.input = open(filename)
         self.lexer = CLexer(self.input)
-        if idx == None:
-            self.index = index()
-        else:
-            self.index = idx
+        self.index = index() if idx is None else idx
         self.top_comment = ""
         self.last_comment = ""
         self.comment = None
@@ -633,14 +640,14 @@ class CParser:
         if self.no_error:
             return
 
-        print("Parse Error: " + msg)
+        print(f"Parse Error: {msg}")
         if token != -1:
             print("Got token ", token)
         self.lexer.debug()
         sys.exit(1)
 
     def debug(self, msg, token=-1):
-        print("Debug: " + msg)
+        print(f"Debug: {msg}")
         if token != -1:
             print("Got token ", token)
         self.lexer.debug()
@@ -650,33 +657,27 @@ class CParser:
         lines = comment.split("\n")
         item = None
         for line in lines:
-            while line != "" and (line[0] == ' ' or line[0] == '\t'):
+            while line != "" and line[0] in [' ', '\t']:
                 line = line[1:]
             while line != "" and line[0] == '*':
                 line = line[1:]
-            while line != "" and (line[0] == ' ' or line[0] == '\t'):
+            while line != "" and line[0] in [' ', '\t']:
                 line = line[1:]
             try:
                 (it, line) = line.split(":", 1)
                 item = it
-                while line != "" and (line[0] == ' ' or line[0] == '\t'):
+                while line != "" and line[0] in [' ', '\t']:
                     line = line[1:]
-                if item in res:
-                    res[item] = res[item] + " " + line
-                else:
-                    res[item] = line
+                res[item] = f"{res[item]} {line}" if item in res else line
             except:
                 if item != None:
-                    if item in res:
-                        res[item] = res[item] + " " + line
-                    else:
-                        res[item] = line
+                    res[item] = f"{res[item]} {line}" if item in res else line
         self.index.info = res
 
     def parseComment(self, token):
         if self.top_comment == "":
             self.top_comment = token[1]
-        if self.comment == None or token[1][0] == '*':
+        if self.comment is None or token[1][0] == '*':
             self.comment = token[1];
         else:
             self.comment = self.comment + token[1]
@@ -694,26 +695,26 @@ class CParser:
     # Parse a comment block associate to a typedef
     #
     def parseTypeComment(self, name, quiet = 0):
-        if name[0:2] == '__':
+        if name[:2] == '__':
             quiet = 1
 
         args = []
         desc = ""
 
-        if self.comment == None:
+        if self.comment is None:
             if not quiet:
-                self.warning("Missing comment for type %s" % (name))
+                self.warning(f"Missing comment for type {name}")
             return((args, desc))
         if self.comment[0] != '*':
             if not quiet:
-                self.warning("Missing * in type comment for %s" % (name))
+                self.warning(f"Missing * in type comment for {name}")
             return((args, desc))
         lines = self.comment.split('\n')
         if lines[0] == '*':
             del lines[0]
-        if lines[0] != "* %s:" % (name):
+        if lines[0] != f"* {name}:":
             if not quiet:
-                self.warning("Misformatted type comment for %s" % (name))
+                self.warning(f"Misformatted type comment for {name}")
                 self.warning("  Expecting '* %s:' got '%s'" % (name, lines[0]))
             return((args, desc))
         del lines[0]
@@ -725,14 +726,13 @@ class CParser:
             while len(l) > 0 and l[0] == '*':
                 l = l[1:]
             l = l.strip()
-            desc = desc + " " + l
+            desc = f"{desc} {l}"
             del lines[0]
 
         desc = desc.strip()
 
-        if quiet == 0:
-            if desc == "":
-                self.warning("Type comment for %s lack description of the macro" % (name))
+        if quiet == 0 and desc == "":
+            self.warning(f"Type comment for {name} lack description of the macro")
 
         return(desc)
     #

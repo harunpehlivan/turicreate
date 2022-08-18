@@ -31,7 +31,7 @@ MechTypes = {
 '*\x86H\x86\xf7\x12\x01\x02\x02': 'KRB5 - Kerberos 5',
 '*\x86H\x86\xf7\x12\x01\x02\x02\x03': 'KRB5 - Kerberos 5 - User to User'
 }
-TypesMech = dict((v,k) for k, v in MechTypes.iteritems())
+TypesMech = {v: k for k, v in MechTypes.iteritems()}
 
 def asn1encode(data = ''):
     #res = asn1.SEQUENCE(str).encode()
@@ -87,7 +87,6 @@ class GSSAPI:
         self['UUID'] = GSS_API_SPNEGO_UUID
         if data:
             self.fromString(data)
-        pass
 
     def __setitem__(self,key,value):
         self.fields[key] = value
@@ -165,7 +164,6 @@ class SPNEGO_NegTokenResp:
         self.fields = {}
         if data:
             self.fromString(data)
-        pass
 
     def __setitem__(self,key,value):
         self.fields[key] = value
@@ -196,11 +194,7 @@ class SPNEGO_NegTokenResp:
         decode_data, total_bytes = asn1decode(decode_data)
         next_byte = unpack('B',decode_data[:1])[0]
 
-        if next_byte != ASN1_MECH_TYPE:
-            # MechType not found, could be an AUTH answer
-            if next_byte != ASN1_RESPONSE_TOKEN:
-                raise Exception('MechType/ResponseToken tag not found %x' % next_byte)
-        else:
+        if next_byte == ASN1_MECH_TYPE:
             decode_data2 = decode_data[1:]
             decode_data2, total_bytes = asn1decode(decode_data2)
             next_byte = unpack('B', decode_data2[:1])[0]
@@ -216,10 +210,7 @@ class SPNEGO_NegTokenResp:
                 return
 
             next_byte = unpack('B', decode_data[:1])[0]
-            if next_byte != ASN1_SUPPORTED_MECH:
-                if next_byte != ASN1_RESPONSE_TOKEN:
-                    raise Exception('Supported Mech/ResponseToken tag not found %x' % next_byte)
-            else:
+            if next_byte == ASN1_SUPPORTED_MECH:
                 decode_data2 = decode_data[1:]
                 decode_data2, total_bytes = asn1decode(decode_data2)
                 next_byte = unpack('B', decode_data2[:1])[0]
@@ -235,6 +226,10 @@ class SPNEGO_NegTokenResp:
                 if next_byte != ASN1_RESPONSE_TOKEN:
                     raise Exception('Response token tag not found %x' % next_byte)
 
+            elif next_byte != ASN1_RESPONSE_TOKEN:
+                raise Exception('Supported Mech/ResponseToken tag not found %x' % next_byte)
+        elif next_byte != ASN1_RESPONSE_TOKEN:
+            raise Exception('MechType/ResponseToken tag not found %x' % next_byte)
         decode_data = decode_data[1:]
         decode_data, total_bytes = asn1decode(decode_data)
         next_byte = unpack('B', decode_data[:1])[0]

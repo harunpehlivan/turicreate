@@ -54,12 +54,12 @@ class docParser(xml.sax.handler.ContentHandler):
 
     def data(self, text):
         if debug:
-            print("data %s" % text)
+            print(f"data {text}")
         self._data.append(text)
 
     def start(self, tag, attrs):
         if debug:
-            print("start %s, %s" % (tag, attrs))
+            print(f"start {tag}, {attrs}")
         if tag == 'function':
             self._data = []
             self.in_function = 1
@@ -104,7 +104,7 @@ class docParser(xml.sax.handler.ContentHandler):
 
     def end(self, tag):
         if debug:
-            print("end %s" % tag)
+            print(f"end {tag}")
         if tag == 'function':
             if self.function != None:
                 function(self.function, self.function_descr,
@@ -290,7 +290,7 @@ skip_impl = (
 )
 
 def skip_function(name):
-    if name[0:12] == "xmlXPathWrap":
+    if name[:12] == "xmlXPathWrap":
         return 1
     if name == "xmlFreeParserCtxt":
         return 1
@@ -307,7 +307,6 @@ def skip_function(name):
         return 1
     if name == "xmlSchemaFreeValidCtxt":
         return 1
-
 #
 # Those are skipped because the Const version is used of the bindings
 # instead.
@@ -339,10 +338,7 @@ def skip_function(name):
         return 1
     if name == "xmlValidateAttributeDecl":
         return 1
-    if name == "xmlPopInputCallbacks":
-        return 1
-
-    return 0
+    return 1 if name == "xmlPopInputCallbacks" else 0
 
 def print_function_wrapper(name, output, export, include):
     global py_types

@@ -123,7 +123,7 @@ class SMB3:
         self.RequireMessageSigning = False    #
         self.ConnectionTable = {}
         self.GlobalFileTable = {}
-        self.ClientGuid = ''.join([random.choice(string.letters) for i in range(16)])
+        self.ClientGuid = ''.join([random.choice(string.letters) for _ in range(16)])
         # Only for SMB 3.0
         self.EncryptionAlgorithmList = ['AES-CCM']
         self.MaxDialect = []
@@ -162,7 +162,7 @@ class SMB3:
             # Outside the protocol
             'ServerIP'                 : '',    #
         }
-   
+
         self._Session = {
             'SessionID'                : 0,   #
             'TreeConnectTable'         : {},    #
@@ -191,7 +191,7 @@ class SMB3:
         }
 
         self.SMB_PACKET = SMB2Packet
-        
+
         self._timeout = timeout
         self._Connection['ServerIP'] = remote_host
         self._NetBIOSSession = None
@@ -284,12 +284,11 @@ class SMB3:
 
     def signSMB(self, packet):
         packet['Signature'] = '\x00'*16
-        if self._Connection['Dialect'] == SMB2_DIALECT_21 or self._Connection['Dialect'] == SMB2_DIALECT_002:
-            if len(self._Session['SessionKey']) > 0:
+        if len(self._Session['SessionKey']) > 0:
+            if self._Connection['Dialect'] in [SMB2_DIALECT_21, SMB2_DIALECT_002]:
                 signature = hmac.new(self._Session['SessionKey'], str(packet), hashlib.sha256).digest()
                 packet['Signature'] = signature[:16]
-        else:
-            if len(self._Session['SessionKey']) > 0:
+            else:
                 p = str(packet)
                 signature = crypto.AES_CMAC(self._Session['SigningKey'], p, len(p))
                 packet['Signature'] = signature
@@ -309,7 +308,7 @@ class SMB3:
         packet['SessionID'] = self._Session['SessionID']
 
         # Default the credit charge to 1 unless set by the caller
-        if ('CreditCharge' in packet.fields) is False:
+        if 'CreditCharge' not in packet.fields:
             packet['CreditCharge'] = 1
 
         # Standard credit request after negotiating protocol
@@ -319,7 +318,10 @@ class SMB3:
         messageId = packet['MessageID']
 
         if self._Session['SigningActivated'] is True and self._Connection['SequenceWindow'] > 2:
-            if packet['TreeID'] > 0 and (packet['TreeID'] in self._Session['TreeConnectTable']) is True:
+            if (
+                packet['TreeID'] > 0
+                and packet['TreeID'] in self._Session['TreeConnectTable']
+            ):
                 if self._Session['TreeConnectTable'][packet['TreeID']]['EncryptData'] is False:
                     packet['Flags'] = SMB2_FLAGS_SIGNED
                     self.signSMB(packet)
@@ -330,16 +332,19 @@ class SMB3:
         if (self._Session['SessionFlags'] & SMB2_SESSION_FLAG_ENCRYPT_DATA) or ( packet['TreeID'] != 0 and self._Session['TreeConnectTable'][packet['TreeID']]['EncryptData'] is True):
             plainText = str(packet)
             transformHeader = SMB2_TRANSFORM_HEADER()
-            transformHeader['Nonce'] = ''.join([random.choice(string.letters) for i in range(11)])
+            transformHeader['Nonce'] = ''.join(
+                [random.choice(string.letters) for _ in range(11)]
+            )
+
             transformHeader['OriginalMessageSize'] = len(plainText)
             transformHeader['EncryptionAlgorithm'] = SMB2_ENCRYPTION_AES128_CCM
-            transformHeader['SessionID'] = self._Session['SessionID'] 
+            transformHeader['SessionID'] = self._Session['SessionID']
             from Crypto.Cipher import AES
             try: 
                 AES.MODE_CCM
             except:
                 LOG.critical("Your pycrypto doesn't support AES.MODE_CCM. Currently only pycrypto experimental supports this mode.\nDownload it from https://www.dlitz.net/software/pycrypto ")
-                raise 
+                raise
             cipher = AES.new(self._Session['EncryptionKey'], AES.MODE_CCM,  transformHeader['Nonce'])
             cipher.update(str(transformHeader)[20:])
             cipherText = cipher.encrypt(plainText)
